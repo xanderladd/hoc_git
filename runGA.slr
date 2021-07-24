@@ -1,0 +1,64 @@
+#!/bin/bash
+
+#SBATCH --qos=regular
+#SBATCH --time=20:00:00
+#SBATCH --nodes=40
+#SBATCH --constraint=haswell
+#SBATCH --mail-user=zladd@berkeley.edu
+#SBATCH --mail-type=ALL
+#SBATCH --account=m3513
+
+
+CURRENTDATE=`date +%m_%d_%Y`
+startTIME=`date +%T`
+custom=''
+source ../../../../input.txt
+echo running GA
+echo OFFSPRING_SIZE is ${OFFSPRING_SIZE}
+echo for ${MAX_NGEN} generations
+echo seed: ${seed}
+export OMP_NUM_THREADS=1
+export IPYTHONDIR=${PWD}/.ipython
+export IPYTHON_PROFILE=benchmark.${SLURM_JOBID}
+
+cd neuron_files/${model}/
+nrnivmodl
+cd ../../
+ulimit -Sn unlimited 
+ipcontroller --init --ip='*' --sqlitedb --ping=30000 --profile=${IPYTHON_PROFILE} &
+sleep 800
+srun -n 2500 ipengine --timeout=3000 --profile=${IPYTHON_PROFILE} &
+sleep 800
+CHECKPOINTS_DIR="checkpoints"
+mkdir -p ${CHECKPOINTS_DIR}
+python optimize_parameters_genetic_alg.py \
+    -vv                                \
+    --compile                          \
+    --offspring_size=5000              \
+    --max_ngen=3000                    \
+    --seed=${seed}                     \
+    --checkpoint balance               \
+    --ipyparallel                      \
+    --start > GA_out.log
+    
+
+exit
+
+# If job finishes in time analyze result
+#--checkpoint balance               \
+#--continu                          \
+
+#mv ${CHECKPOINTS_DIR}/seed${seed}.pkl checkpoints_final/
+# check if the job with 4th seed is finished
+
+# if [[ $seed = 4 ]]; then
+#   sbatch analyse_stage2.slurm
+# else
+#   seed_new=$(($seed+1))
+#   sed -i -e "s/seed in $seed/seed in $seed_new/g" start_haswell.sh
+#   sed -i -e "s/seed in $seed/seed in $seed_new/g" restart_haswell.sh
+#   sbatch start_batchjob_stage2.slurm
+# fi
+
+
+
